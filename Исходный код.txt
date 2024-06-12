@@ -1,0 +1,95 @@
+import tkinter as tk
+from tkinter import messagebox
+import os
+import datetime
+import socket
+import threading
+from flask import Flask, request
+
+app = Flask(__name__)
+
+LOG_DIRECTORY = "LOG"
+
+def parse_files(directory):
+    data = []
+    for filename in os.listdir(directory):
+        if os.path.isfile(os.path.join(directory, filename)):
+            try:
+                with open(os.path.join(directory, filename), 'r', encoding='utf-8') as file:
+                    lines = file.readlines()
+                    for line in lines:
+                        columns = line.strip().split(';')
+                        data.append(columns)
+            except UnicodeDecodeError:
+                print(f"Unable to decode file '{filename}'. Skipping...")
+    data.sort(key=lambda x: x[0])
+    return data
+
+def generate_html_table(data):
+    html = "<table border='1' style='width: 100%; font-size: 145%;' class='increased-font bold-first-column'><tr><th>#</th><th>Version</th><th>Computer</th><th>Location</th><th>Date</th><th>Time</th><th>Phone</th></tr>"
+    for idx, row in enumerate(data, start=1):
+        html += "<tr>"
+        html += f"<td class='first-column'>{idx}</td>"
+        for i, column in enumerate(row):
+            if i == 0:
+                html += f"<td style='text-align: center; font-weight: bold; font-size: 40px;'>{column}</td>"
+            else:
+                html += f"<td style='text-align: center;'>{column}</td>"
+        html += "</tr>"
+    html += "</table>"
+    return html
+
+def log_visit():
+    if not os.path.exists(LOG_DIRECTORY):
+        os.makedirs(LOG_DIRECTORY)
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ip_address = request.remote_addr
+    host_name = socket.gethostname()
+    log_entry = f"{timestamp} | IP: {ip_address} | HOST: {host_name}\n"
+    with open(os.path.join(LOG_DIRECTORY, 'log.txt'), 'a') as logfile:
+        logfile.write(log_entry)
+
+@app.route('/')
+def display_data():
+    log_visit()
+    directory = r"\\10.1.1.39\Fileshare\VER"
+    data = parse_files(directory)
+    html_table = generate_html_table(data)
+    return html_table
+
+def run_flask():
+    app.run(host='0.0.0.0', port=5000)
+
+def show_info():
+    ip_address = socket.gethostbyname(socket.gethostname())
+    port = 5000
+    email = "info@spirkin.uz"
+    info = f"IP адрес: {ip_address}\nПорт: {port}\n"
+
+    root = tk.Tk()
+    root.title("Статистика")
+
+    # Установка минимальной и максимальной ширины окна
+    root.minsize(250, 75)
+
+    label = tk.Label(root, text=info)
+    label.pack()
+
+    def callback(event):
+        root.clipboard_clear()
+        root.clipboard_append(email)
+        root.update()
+        messagebox.showinfo("Копирование", "Адрес скопирован в буфер обмена")
+
+    email_label = tk.Label(root, text=email, fg="blue", cursor="hand2")
+    email_label.pack()
+    email_label.bind("<Button-1>", callback)
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+
+    show_info()
